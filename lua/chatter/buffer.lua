@@ -13,18 +13,18 @@ local function set_local_opt(name, value)
 end
 
 local function set_options(buf)
-  set_buf_opt(buf, 'bufhidden', 'wipe')
+  -- set_buf_opt(buf, 'bufhidden', 'wipe')
+  set_buf_opt(buf, 'buflisted', true)
   set_buf_opt(buf, 'buftype', 'nofile')
-  set_buf_opt(buf, 'filetype', 'markdown')
   set_buf_opt(buf, 'modified', false)
   set_buf_opt(buf, 'swapfile', false)
 
   api.nvim_buf_set_var(buf, 'disable_jump_to_last_position', true)
 
-  set_local_opt('cmdheight', 0)
+  set_local_opt('cmdheight', 1)
   set_local_opt('concealcursor', 'n')
   set_local_opt('fillchars', 'eob: ')
-  set_local_opt('hidden', true)
+  -- set_local_opt('hidden', true)
   set_local_opt('number', false)
   set_local_opt('relativenumber', false)
   set_local_opt('showtabline', 0)
@@ -77,6 +77,29 @@ local function get_end_pos(self)
   return row, col
 end
 
+--- Append lines to the buffer
+---@param lines string[] The lines to append
+function M:append_lines(lines)
+  local state = internal_state(self)
+
+  self:modifiable(true)
+
+  if state.spinner then
+    state.spinner:stop()
+  end
+
+  vim.api.nvim_buf_set_lines(state.buf, -1, -1, false, lines)
+
+  self:modifiable(false)
+
+  -- Make the cursor follow the text if the window is not focused
+  if vim.api.nvim_get_current_win() ~= state.win then
+    vim.api.nvim_buf_call(state.buf, function()
+      vim.cmd [[normal! G]]
+    end)
+  end
+end
+
 --- Append text to the buffer
 ---@param text string The text to append
 function M:append(text)
@@ -94,14 +117,37 @@ function M:append(text)
     error("Error appending text to buffer " .. state.buf .. ": " .. err)
   end
 
-  -- Make the cursor follow the text
-  local current_win = api.nvim_get_current_win()
-  if current_win == state.win then
-    row, col = get_end_pos(self)
-    api.nvim_win_set_cursor(current_win, { row + 1, col + 1 })
-  end
-
   self:modifiable(false)
+
+  -- Make the cursor follow the text if the window is not focused
+  if vim.api.nvim_get_current_win() ~= state.win then
+    vim.api.nvim_buf_call(state.buf, function()
+      vim.cmd [[normal! G]]
+    end)
+  end
+end
+
+function M:get_state()
+  return _internal_state
+end
+
+function M:clear()
+  local modifiable = vim.api.nvim_get_option_value('modifiable', { buf = self:get_buf() })
+  self:modifiable(true)
+  api.nvim_buf_set_lines(self:get_buf(), 0, -1, false, {})
+  self:modifiable(modifiable)
+end
+
+--- Get the buffer associated with the Buffer
+---@return number buf The buffer ID
+function M:get_buf()
+  return internal_state(self).buf
+end
+
+--- Get the window associated with the Buffer
+---@return number win The window ID
+function M:get_win()
+  return internal_state(self).win
 end
 
 --- Start the spinner with an optional status message
@@ -117,25 +163,35 @@ function M:stop_spinner()
   internal_state(self).spinner:stop()
 end
 
+function M:set_buf_option(name, value)
+  local state = internal_state(self)
+  local opts = { buf = state.buf }
+  api.nvim_set_option_value(name, value, opts)
+end
+
+function M:set_win_option(name, value)
+  local state = internal_state(self)
+  local opts = { win = state.win }
+  api.nvim_set_option_value(name, value, opts)
+end
+
 --- Create a new chatter.Buffer instance
+---@param name string The name of the buffer
+---@param opts? vim.api.keyset.win_config Table defining the window configuration
 ---@return chatter.Buffer
-local function new()
+local function new(name, opts)
   ---@type chatter.Buffer
   local self = setmetatable({}, { __index = M })
 
+  -- local buf = api.nvim_get_current_buf()
+  -- local win = api.nvim_get_current_win()
   local buf = api.nvim_create_buf(true, true)
 
-  local width, height = vim.o.columns, vim.o.lines
+  api.nvim_buf_set_name(buf, name)
 
-  local win = vim.api.nvim_open_win(buf, true, {
-    relative = "editor",
-    width = width,
-    hight = height,
-    row = 0,
-    col = 0,
-    style = "minimal",
-    border = "none",
-  })
+  opts = vim.tbl_deep_extend("force", { win = 0 }, opts or {})
+
+  local win = vim.api.nvim_open_win(buf, true, opts)
 
   ---@type chatter.BufferState
   local state = {
@@ -147,12 +203,10 @@ local function new()
 
   _internal_state[self] = state
 
-  set_options(buf)
-
   api.nvim_buf_set_lines(buf, 0, -1, false, {})
   api.nvim_win_set_cursor(win, { 1, 0 })
 
-  self:modifiable(false)
+  set_options(buf)
 
   return self
 end
