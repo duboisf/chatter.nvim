@@ -42,7 +42,7 @@ function M.open()
   end
   assert(chat_client)
   local completion_req = M.new_completion_request()
-  require("chatter.ui").new(chat_client, completion_req)
+  require("chatter.ui").init(chat_client, completion_req)
 end
 
 --- Setup function

@@ -127,6 +127,12 @@ function M:append(text)
   end
 end
 
+--- Append an error message to the buffer.
+---@param text string The error message to append
+function M:append_error(text)
+  self:append("\n\n```\n" .. text .. "\n```")
+end
+
 function M:get_state()
   return _internal_state
 end
