@@ -15,12 +15,16 @@ local UI = {}
 function UI:submit_prompt()
   local input_lines = vim.api.nvim_buf_get_lines(self.prompt:get_buf(), 0, -1, false)
 
-  self.history:append("\n# User\n")
+  self.history:append("\n# User")
+  if input_lines[1] ~= "" then
+    self.history:append("\n")
+  end
   self.history:append_lines(input_lines)
   self.history:append("\n\n")
 
   vim.cmd.stopinsert()
   self.prompt:clear()
+  self.prompt:append("\n", true)
 
   local input_text = table.concat(input_lines, "\n")
   table.insert(self.completion_req.messages, { role = "user", content = input_text })
@@ -138,6 +142,7 @@ local function init(chat_client, completion_req)
   local prompt = Buffer.new("chatter://prompt", { split = "below", height = 7 })
   history:set_buf_option("filetype", "chatter")
   prompt:modifiable(true)
+  prompt:append("\n")
   prompt:set_win_option("winbar", "%#QuickFixLine# Prompt")
 
   local spinner = require("chatter.spinner").new(

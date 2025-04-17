@@ -60,6 +60,18 @@ function M:modifiable(modifiable)
   api.nvim_set_option_value('readonly', not modifiable, opts)
 end
 
+---Run callback with the buffer modifiable, restoring the original modifiable state afterwards
+---@param callback fun() The callback to run
+function M:with_modifiable(callback)
+  local modifiable = vim.api.nvim_get_option_value('modifiable', { buf = self:get_buf() })
+
+  self:modifiable(true)
+
+  callback()
+
+  self:modifiable(modifiable)
+end
+
 --- Get the end position of the buffer
 --- @param self chatter.Buffer
 --- @return number row
@@ -78,11 +90,9 @@ end
 function M:append_lines(lines)
   local state = internal_state(self)
 
-  self:modifiable(true)
-
-  vim.api.nvim_buf_set_lines(state.buf, -1, -1, false, lines)
-
-  self:modifiable(false)
+  self:with_modifiable(function()
+    vim.api.nvim_buf_set_lines(state.buf, -1, -1, false, lines)
+  end)
 
   -- Make the cursor follow the text if the window is not focused
   if vim.api.nvim_get_current_win() ~= state.win then
@@ -94,21 +104,17 @@ end
 
 --- Append text to the buffer
 ---@param text string The text to append
-function M:append(text)
+---@param follow? boolean Whether to follow the text after appending
+function M:append(text, follow)
   local state = internal_state(self)
-
-  self:modifiable(true)
-
   local row, col = get_end_pos(self)
-  local ok, err = pcall(vim.api.nvim_buf_set_text, state.buf, row, col, row, col, vim.split(text, "\n"))
-  if not ok then
-    error("Error appending text to buffer " .. state.buf .. ": " .. err)
-  end
 
-  self:modifiable(false)
+  self:with_modifiable(function()
+    vim.api.nvim_buf_set_text(state.buf, row, col, row, col, vim.split(text, "\n"))
+  end)
 
-  -- Make the cursor follow the text if the window is not focused
-  if vim.api.nvim_get_current_win() ~= state.win then
+  -- Make the cursor follow the text if follow == true or if the window is not focused
+  if follow or vim.api.nvim_get_current_win() ~= state.win then
     vim.api.nvim_buf_call(state.buf, function()
       vim.cmd [[normal! G]]
     end)
@@ -126,10 +132,9 @@ function M:get_state()
 end
 
 function M:clear()
-  local modifiable = vim.api.nvim_get_option_value('modifiable', { buf = self:get_buf() })
-  self:modifiable(true)
-  api.nvim_buf_set_lines(self:get_buf(), 0, -1, false, {})
-  self:modifiable(modifiable)
+  self:with_modifiable(function()
+    api.nvim_buf_set_lines(self:get_buf(), 0, -1, false, {})
+  end)
 end
 
 --- Get the buffer associated with the Buffer
