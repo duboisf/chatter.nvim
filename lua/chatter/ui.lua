@@ -1,21 +1,22 @@
 local Buffer = require("chatter.buffer")
 
+local history_winbar_prefix = "%#QuickFixLine# Chat history"
 local initialized = false
+local virtual_text_ns = vim.api.nvim_create_namespace("chatter")
 
 ---@class (exact) chatter.UI
 ---@field private chat_client chatter.ChatClient
 ---@field private completion_req chatter.CompletionRequest
 ---@field private history chatter.Buffer
 ---@field private prompt chatter.Buffer
+---@field private spinner chatter.Spinner
 local UI = {}
 
 function UI:submit_prompt()
   local input_lines = vim.api.nvim_buf_get_lines(self.prompt:get_buf(), 0, -1, false)
 
-  self.history:append("\n# User\n\n")
-  for _, line in ipairs(input_lines) do
-    self.history:append(line)
-  end
+  self.history:append("\n# User\n")
+  self.history:append_lines(input_lines)
   self.history:append("\n\n")
 
   vim.cmd.stopinsert()
@@ -25,7 +26,8 @@ function UI:submit_prompt()
   table.insert(self.completion_req.messages, { role = "user", content = input_text })
 
   self.history:append("# Assistant\n\n")
-  self.history:start_spinner("Waiting for assistant...")
+
+  self.spinner:start()
 
   local thread = coroutine.create(function()
     local stream_id, err = self.chat_client:request_completion(self.completion_req)
@@ -58,6 +60,8 @@ function UI:submit_prompt()
     end
 
     self.history:append("\n")
+
+    self:reset_spinner()
   end)
 
   coroutine.resume(thread)
@@ -72,6 +76,41 @@ function UI:setup_keymaps()
       silent = true,
     }
   )
+end
+
+function UI:reset_spinner()
+  self.spinner:stop()
+  self.history:set_win_option("winbar", history_winbar_prefix)
+  vim.api.nvim_buf_clear_namespace(self.history:get_buf(), virtual_text_ns, 0, 0)
+end
+
+--- Start the spinner and set the virtual text
+---@param history chatter.Buffer
+---@param spinner string
+local function on_spin(history, spinner)
+  local winbar = history_winbar_prefix .. " 〣 Assitant is thinking 🤔 " .. spinner
+  history:set_win_option("winbar", winbar)
+
+  -- Set the virtual text on the first line (line 0, since it's 0-indexed)
+  vim.api.nvim_buf_set_extmark(
+    history:get_buf(),
+    virtual_text_ns,
+    math.max(0, vim.api.nvim_buf_line_count(history:get_buf()) - 1), 0,
+    {
+      id = 1,
+      hl_mode = 'combine',
+      priority = 100,
+      virt_text = {
+        { spinner, 'Comment' },
+      },
+    })
+end
+
+---Stop the spinner and clear the virtual text
+---@param history chatter.Buffer
+local function on_stop(history)
+  history:set_win_option("winbar", history_winbar_prefix)
+  vim.api.nvim_buf_clear_namespace(history:get_buf(), virtual_text_ns, 0, -1)
 end
 
 --- Create a new UI instance
@@ -90,7 +129,7 @@ local function init(chat_client, completion_req)
   local history = Buffer.new("chatter://history", { split = "right" })
   history:modifiable(false)
   history:set_buf_option("filetype", "chatter")
-  history:set_win_option("winbar", "%#QuickFixLine# Chat history")
+  history:set_win_option("winbar", history_winbar_prefix)
 
   -- Close original buffer
   vim.cmd.bunload({ args = { original_buf }, bang = true })
@@ -101,12 +140,18 @@ local function init(chat_client, completion_req)
   prompt:modifiable(true)
   prompt:set_win_option("winbar", "%#QuickFixLine# Prompt")
 
+  local spinner = require("chatter.spinner").new(
+    vim.schedule_wrap(function(spinner) on_spin(history, spinner) end),
+    vim.schedule_wrap(function() on_stop(history) end)
+  )
+
   ---@type chatter.UI
   local self = setmetatable({
     chat_client = chat_client,
     completion_req = completion_req,
     history = history,
     prompt = prompt,
+    spinner = spinner,
   }, { __index = UI })
 
   self:setup_keymaps()

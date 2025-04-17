@@ -1,5 +1,3 @@
-local Spinner = require("chatter.spinner")
-
 local api = vim.api
 
 local function set_buf_opt(buf, name, value)
@@ -30,14 +28,12 @@ local function set_options(buf)
   set_local_opt('showtabline', 0)
   set_local_opt('signcolumn', 'yes:1')
   set_local_opt('wrap', true)
-  set_local_opt('laststatus', 0)
 end
 
 ---@class (exact) chatter.BufferState
 ---@field buf number
 ---@field win number
 ---@field lines string[]
----@field spinner chatter.Spinner
 
 ---@class chatter.BufferStateDict : { [chatter.Buffer]: chatter.BufferState? }
 local _internal_state = setmetatable({}, {
@@ -84,10 +80,6 @@ function M:append_lines(lines)
 
   self:modifiable(true)
 
-  if state.spinner then
-    state.spinner:stop()
-  end
-
   vim.api.nvim_buf_set_lines(state.buf, -1, -1, false, lines)
 
   self:modifiable(false)
@@ -106,10 +98,6 @@ function M:append(text)
   local state = internal_state(self)
 
   self:modifiable(true)
-
-  if state.spinner then
-    state.spinner:stop()
-  end
 
   local row, col = get_end_pos(self)
   local ok, err = pcall(vim.api.nvim_buf_set_text, state.buf, row, col, row, col, vim.split(text, "\n"))
@@ -156,19 +144,6 @@ function M:get_win()
   return internal_state(self).win
 end
 
---- Start the spinner with an optional status message
----@param text? string The status message to display
-function M:start_spinner(text)
-  local spinner = internal_state(self).spinner
-  spinner:stop()
-  spinner:start(text)
-end
-
---- Stop the spinner
-function M:stop_spinner()
-  internal_state(self).spinner:stop()
-end
-
 function M:set_buf_option(name, value)
   local state = internal_state(self)
   local opts = { buf = state.buf }
@@ -204,7 +179,6 @@ local function new(name, opts)
     buf = buf,
     win = win,
     lines = {},
-    spinner = Spinner.new(buf)
   }
 
   _internal_state[self] = state

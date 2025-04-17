@@ -1,7 +1,5 @@
 -- Copied from CopilotChat.nvim, modified heavily
 
-local ns = vim.api.nvim_create_namespace('chatter.spinner')
-
 local spinner_frames = {
   '⠋',
   '⠙',
@@ -16,8 +14,9 @@ local spinner_frames = {
 }
 
 ---@class (exact) chatter.SpinnerState
----@field bufnr number
 ---@field index number
+---@field on_spin fun(spinner: string)
+---@field on_stop fun()
 ---@field timer uv.uv_timer_t?
 
 ---@class chatter.SpinneStateDict : { [chatter.Spinner]: chatter.SpinnerState? }
@@ -37,8 +36,7 @@ local M = {}
 
 --- Start the spinner
 --- @param self chatter.Spinner
---- @param status? string Optional status to display
-function M:start(status)
+function M:start()
   local state = internal_state(self)
   -- If the spinner is already running, it's a no-op
   if state.timer then
@@ -52,25 +50,13 @@ function M:start(status)
   timer:start(
     0,
     100,
-    vim.schedule_wrap(function()
+    function()
       local frame = spinner_frames[state.index % #spinner_frames + 1]
 
-      if status then
-        frame = status .. ' ' .. frame
-      end
-
-      vim.api.nvim_buf_set_extmark(state.bufnr, ns, math.max(0, vim.api.nvim_buf_line_count(state.bufnr) - 1), 0,
-        {
-          id = 1,
-          hl_mode = 'combine',
-          priority = 100,
-          virt_text = {
-            { frame, 'Comment' },
-          },
-        })
+      state.on_spin(frame)
 
       state.index = state.index % #spinner_frames + 1
-    end)
+    end
   )
 end
 
@@ -81,24 +67,25 @@ function M:stop()
     return
   end
 
+  state.on_stop()
   state.timer:stop()
   state.timer:close()
 
   state.timer = nil
-
-  vim.api.nvim_buf_del_extmark(state.bufnr, ns, 1)
 end
 
 ---Create a new spinner
----@param bufnr number The buffer number to attach the spinner to
+---@param on_spin fun(spinner: string) The callback with the spinner string on each tick
+---@param on_stop fun() The callback when the spinner stops
 ---@return chatter.Spinner # A new spinner instance
-local function new(bufnr)
+local function new(on_spin, on_stop)
   ---@type chatter.Spinner
   local self = setmetatable({}, { __index = M })
 
   ---@type chatter.SpinnerState
   local state = {
-    bufnr = bufnr,
+    on_spin = on_spin,
+    on_stop = on_stop,
     index = 1,
     timer = nil,
   }
