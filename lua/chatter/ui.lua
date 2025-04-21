@@ -56,11 +56,11 @@ function UI:submit_prompt()
       end
 
       if result.done then
-        table.insert(self.completion_req.messages, { role = "assistant", content = result.response })
+        table.insert(self.completion_req.messages, { role = "assistant", content = result.content })
         break
       end
 
-      self.history:append(result.response)
+      self.history:append(result.content)
     end
 
     self.history:append("\n")

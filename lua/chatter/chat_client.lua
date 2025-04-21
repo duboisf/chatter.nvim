@@ -162,7 +162,8 @@ end
 
 ---@class chatter.StreamResponse
 ---@field done boolean
----@field response string
+---@field type string
+---@field content string Can be string or tool response (TODO)
 
 ---@async
 --- Get the next chunk from a chat response stream
@@ -181,7 +182,7 @@ function M:stream_chat(stream_id)
   if reply.error then
     return false, nil, reply.error.message
   end
-  -- assert(resp.result, "Invalid response from server")
+
   if reply.result and type(reply.result.done) ~= "boolean" then
     return false, nil, "Invalid result from server"
   end
