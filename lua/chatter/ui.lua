@@ -33,42 +33,41 @@ function UI:submit_prompt()
 
   self.spinner:start()
 
-  local thread = coroutine.create(function()
-    local stream_id, err = self.chat_client:request_completion(self.completion_req)
-    if err then
-      self.history:append("\n\nChat completion request error: " .. err)
-      return
-    elseif not stream_id then
-      self.history:append("\n\nChat completion request failed, did not receive stream id")
-      return
-    end
-
-    while true do
-      local ok, result
-      ok, result, err = self.chat_client:stream_chat(stream_id)
-
-      if not ok then
-        self.history:append_error("💥 error from server: " .. err)
+  coroutine.wrap(function()
+    (function()
+      local stream_id, err = self.chat_client:request_completion(self.completion_req)
+      if err then
+        self.history:append_lines({ "```", "Chat completion request error: ", err, "```" })
         return
-      elseif not result then
-        self.history:append_error("🤐 error from server: empty response")
+      elseif not stream_id then
+        self.history:append_lines({ "```", "Chat completion request failed, did not receive stream id", "```" })
         return
       end
 
-      if result.done then
-        table.insert(self.completion_req.messages, { role = "assistant", content = result.content })
-        break
-      end
+      while true do
+        local ok, result
+        ok, result, err = self.chat_client:stream_chat(stream_id)
 
-      self.history:append(result.content)
-    end
+        if not ok then
+          self.history:append_error("💥 error from server: " .. err)
+          return
+        elseif not result then
+          self.history:append_error("🤐 error from server: empty response")
+          return
+        end
+
+        if result.done then
+          table.insert(self.completion_req.messages, { role = "assistant", content = result.content })
+          break
+        end
+
+        self.history:append(result.content)
+      end
+    end)()
 
     self.history:append("\n")
-
     self:reset_spinner()
-  end)
-
-  coroutine.resume(thread)
+  end)()
 end
 
 function UI:setup_keymaps()

@@ -148,7 +148,7 @@ function M:request_completion(completion_req)
     completion = completion_req,
   }
 
-  local response = send_request(job_id, "Chat/InitStream", rpc_params)
+  local response = send_request(job_id, "chat/stream/init", rpc_params)
   if response.error then
     return nil, response.error.message
   end
@@ -178,7 +178,7 @@ function M:stream_chat(stream_id)
   end
   assert(coroutine.running(), "continue_stream must be called in a coroutine")
   local params = { id = stream_id }
-  local reply = send_request(job_id, "Chat/ContinueStream", params)
+  local reply = send_request(job_id, "chat/stream/continue", params)
   if reply.error then
     return false, nil, reply.error.message
   end
