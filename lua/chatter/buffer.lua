@@ -32,7 +32,6 @@ end
 
 ---@class (exact) chatter.BufferState
 ---@field buf number
----@field win number
 ---@field lines string[]
 
 ---@class chatter.BufferStateDict : { [chatter.Buffer]: chatter.BufferState? }
@@ -95,7 +94,7 @@ function M:append_lines(lines)
   end)
 
   -- Make the cursor follow the text if the window is not focused
-  if vim.api.nvim_get_current_win() ~= state.win then
+  if vim.api.nvim_get_current_win() ~= vim.fn.bufwinid(self:get_buf()) then
     vim.api.nvim_buf_call(state.buf, function()
       vim.cmd [[normal! G]]
     end)
@@ -124,7 +123,7 @@ end
 --- Append an error message to the buffer.
 ---@param text string The error message to append
 function M:append_error(text)
-  self:append("\n\n```\n" .. text .. "\n```")
+  self:append("\n\n_" .. text .. "_\n")
 end
 
 function M:get_state()
@@ -145,8 +144,8 @@ end
 
 --- Get the window associated with the Buffer
 ---@return number win The window ID
-function M:get_win()
-  return internal_state(self).win
+function M:get_winid()
+  return vim.fn.bufwinid(self:get_buf())
 end
 
 function M:set_buf_option(name, value)
@@ -156,8 +155,7 @@ function M:set_buf_option(name, value)
 end
 
 function M:set_win_option(name, value)
-  local state = internal_state(self)
-  local opts = { win = state.win }
+  local opts = { win = self:get_winid() }
   api.nvim_set_option_value(name, value, opts)
 end
 
@@ -169,8 +167,6 @@ local function new(name, opts)
   ---@type chatter.Buffer
   local self = setmetatable({}, { __index = M })
 
-  -- local buf = api.nvim_get_current_buf()
-  -- local win = api.nvim_get_current_win()
   local buf = api.nvim_create_buf(true, true)
 
   api.nvim_buf_set_name(buf, name)
